@@ -1,0 +1,758 @@
+import os, zipfile, textwrap
+
+base = "/mnt/data/mednotes_secure_starter"
+os.makedirs(base, exist_ok=True)
+
+html = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="MedNotes patient and doctor portal prototype" />
+  <title>MedNotes | Patient & Doctor Portal</title>
+  <style>
+    :root { --ink:#203044; --muted:#65758b; --brand:#236b65; --brand2:#dff3ef; --bg:#f4f8fa; --card:#fff; --line:#dce5eb; --danger:#a32f37; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+    header { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1rem clamp(1rem,4vw,3rem); background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    .brand { font-weight:800; font-size:1.35rem; color:var(--brand); letter-spacing:.2px; }
+    .top-actions { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+    select,input,textarea,button { font:inherit; }
+    select,input,textarea { width:100%; padding:.72rem .8rem; border:1px solid #cbd7df; border-radius:10px; background:white; color:var(--ink); }
+    header select { width:auto; max-width:170px; }
+    button { border:0; border-radius:10px; padding:.72rem 1rem; cursor:pointer; font-weight:650; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .primary { background:var(--brand); color:white; }
+    .secondary { background:var(--brand2); color:#174e49; }
+    .plain { background:transparent; color:var(--brand); border:1px solid var(--line); }
+    .danger { background:#fde9e9; color:var(--danger); }
+    main { max-width:1100px; margin:0 auto; padding:clamp(1rem,4vw,2.5rem); }
+    .hero { display:grid; grid-template-columns:1.3fr .7fr; gap:2rem; align-items:center; padding:clamp(1rem,4vw,3rem) 0; }
+    .hero h1 { font-size:clamp(2rem,5vw,3.6rem); line-height:1.08; margin:.3rem 0 1rem; }
+    .hero p { color:var(--muted); font-size:1.08rem; line-height:1.6; }
+    .hero-art { background:linear-gradient(145deg,#e1f4f0,#eff5ff); border-radius:28px; min-height:240px; display:grid; place-items:center; padding:2rem; text-align:center; }
+    .hero-art .cross { font-size:5rem; color:var(--brand); }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:1.2rem; margin:1rem 0; box-shadow:0 4px 18px #233b4d08; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+    .three { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
+    .field { display:grid; gap:.38rem; margin:.8rem 0; }
+    label { font-size:.92rem; font-weight:650; }
+    .muted { color:var(--muted); }
+    .small { font-size:.88rem; }
+    .row { display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; }
+    .spread { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; }
+    .hidden { display:none !important; }
+    .notice { padding:.8rem 1rem; border-radius:10px; background:#fff7df; color:#694d00; margin:.8rem 0; }
+    .success { background:#e4f7ec; color:#1c6239; }
+    .error { background:#fde9e9; color:#8e2028; }
+    .pill { display:inline-block; border-radius:999px; padding:.25rem .65rem; background:#e9f0f5; color:#385166; font-size:.82rem; }
+    .stat { font-size:1.8rem; font-weight:800; margin:.3rem 0; }
+    .record { border:1px solid var(--line); padding:1rem; border-radius:12px; margin:.7rem 0; }
+    .record h3 { margin:.1rem 0 .5rem; }
+    .tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin:1rem 0; }
+    .tabs button.active { background:var(--brand); color:#fff; }
+    .divider { border:0; border-top:1px solid var(--line); margin:1.2rem 0; }
+    footer { padding:2rem; text-align:center; color:var(--muted); font-size:.88rem; }
+    #appMessage { position:sticky; top:70px; z-index:4; }
+    @media(max-width:760px) { .hero,.grid,.three { grid-template-columns:1fr; } header { align-items:flex-start; } .top-actions { justify-content:flex-end; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">✚ MedNotes</div>
+  <div class="top-actions">
+    <label class="small" for="languageSelect" data-i18n="language">Language</label>
+    <select id="languageSelect" aria-label="Language">
+      <option value="en">English</option>
+      <option value="hi">हिन्दी</option>
+      <option value="mr">मराठी</option>
+      <option value="kok">कोंकणी</option>
+    </select>
+    <button id="headerLoginBtn" class="plain" data-i18n="login">Log in</button>
+    <button id="headerSignupBtn" class="primary" data-i18n="signup">Sign up</button>
+    <button id="logoutBtn" class="plain hidden" data-i18n="logout">Log out</button>
+  </div>
+</header>
+
+<main>
+  <div id="appMessage" aria-live="polite"></div>
+
+  <section id="homeView">
+    <div class="hero">
+      <div>
+        <span class="pill" data-i18n="carePortal">Patient & doctor portal</span>
+        <h1 data-i18n="welcome">Your health history, organised in one place.</h1>
+        <p data-i18n="intro">Keep your health details, visit notes and reports organised so you can share relevant information with an authorised healthcare professional.</p>
+        <div class="row">
+          <button class="primary" id="heroGetStarted" data-i18n="getStarted">Get started</button>
+          <button class="plain" id="heroLogin" data-i18n="login">Log in</button>
+        </div>
+        <p class="small muted" data-i18n="demoWarning">Student project prototype. Use dummy information only; this is not an emergency or clinical-care service.</p>
+      </div>
+      <div class="hero-art"><div><div class="cross">✚</div><strong data-i18n="simpleCare">Simple, organised care</strong><p class="muted" data-i18n="accessible">Designed with clear controls and multilingual labels.</p></div></div>
+    </div>
+    <div class="three">
+      <div class="card"><h3 data-i18n="patientRecords">Patient records</h3><p class="muted" data-i18n="patientRecordsDesc">Keep your profile and health notes together.</p></div>
+      <div class="card"><h3 data-i18n="reports">Reports</h3><p class="muted" data-i18n="reportsDesc">Upload a report to private storage after setup.</p></div>
+      <div class="card"><h3 data-i18n="doctorAccess">Doctor access</h3><p class="muted" data-i18n="doctorAccessDesc">Doctors should only see records explicitly authorised for them.</p></div>
+    </div>
+  </section>
+
+  <section id="authView" class="hidden">
+    <div class="card" style="max-width:620px;margin:1rem auto">
+      <div class="spread"><h2 id="authTitle" data-i18n="createAccount">Create account</h2><button id="backHome" class="plain" data-i18n="back">Back</button></div>
+      <div class="notice" data-i18n="authNote">Use an email you can access. Email verification may be required before signing in.</div>
+      <form id="signupForm">
+        <div class="field"><label for="signupName" data-i18n="fullName">Full name</label><input id="signupName" autocomplete="name" required maxlength="120" /></div>
+        <div class="field"><label for="signupEmail" data-i18n="email">Email</label><input id="signupEmail" type="email" autocomplete="email" required /></div>
+        <div class="field"><label for="signupBirth" data-i18n="birthDate">Date of birth (optional)</label><input id="signupBirth" type="date" /></div>
+        <div class="field"><label for="signupRole" data-i18n="accountType">Account type</label><select id="signupRole"><option value="patient" data-i18n="patient">Patient</option><option value="doctor" data-i18n="doctor">Doctor (requires admin approval)</option></select><p class="small muted" data-i18n="doctorApproval">Choosing Doctor does not grant doctor permissions. An administrator must approve the account in Supabase.</p></div>
+        <div class="field"><label for="signupPassword" data-i18n="password">Password</label><input id="signupPassword" type="password" autocomplete="new-password" minlength="12" required /></div>
+        <div class="field"><label for="signupConfirm" data-i18n="confirmPassword">Confirm password</label><input id="signupConfirm" type="password" autocomplete="new-password" minlength="12" required /></div>
+        <button class="primary" type="submit" id="signupSubmit" data-i18n="createAccount">Create account</button>
+      </form>
+      <form id="loginForm" class="hidden">
+        <div class="field"><label for="loginEmail" data-i18n="email">Email</label><input id="loginEmail" type="email" autocomplete="email" required /></div>
+        <div class="field"><label for="loginPassword" data-i18n="password">Password</label><input id="loginPassword" type="password" autocomplete="current-password" required /></div>
+        <button class="primary" type="submit" data-i18n="login">Log in</button>
+        <button class="plain" type="button" id="forgotPassword" data-i18n="forgotPassword">Forgot password?</button>
+      </form>
+      <p class="small muted" id="authSwitchText">Already have an account? <button type="button" id="switchToLogin" class="plain" data-i18n="login">Log in</button></p>
+    </div>
+  </section>
+
+  <section id="dashboardView" class="hidden">
+    <div class="spread">
+      <div><span class="pill" id="roleBadge">Patient</span><h1 id="dashboardTitle" data-i18n="dashboard">Dashboard</h1><p class="muted" id="welcomeUser"></p></div>
+      <button id="refreshDashboard" class="plain" data-i18n="refresh">Refresh</button>
+    </div>
+    <div id="patientDashboard">
+      <div class="grid">
+        <div class="card"><h3 data-i18n="myProfile">My profile</h3>
+          <form id="profileForm">
+            <div class="field"><label for="profileName" data-i18n="fullName">Full name</label><input id="profileName" required maxlength="120" /></div>
+            <div class="field"><label for="profileBirth" data-i18n="birthDate">Date of birth</label><input id="profileBirth" type="date" /></div>
+            <div class="field"><label for="profilePhone" data-i18n="phone">Phone (optional)</label><input id="profilePhone" type="tel" maxlength="30" /></div>
+            <button class="primary" type="submit" data-i18n="saveProfile">Save profile</button>
+          </form>
+        </div>
+        <div class="card"><h3 data-i18n="addHealthNote">Add health note</h3>
+          <form id="noteForm">
+            <div class="field"><label for="noteTitle" data-i18n="noteTitle">Title</label><input id="noteTitle" required maxlength="120" /></div>
+            <div class="field"><label for="noteText" data-i18n="noteDetails">Details</label><textarea id="noteText" rows="4" required maxlength="5000"></textarea></div>
+            <button class="primary" type="submit" data-i18n="saveNote">Save note</button>
+          </form>
+        </div>
+      </div>
+      <div class="card">
+        <div class="spread"><h2 data-i18n="myNotes">My health notes</h2><button id="showUpload" class="secondary" data-i18n="uploadReport">Upload report</button></div>
+        <form id="uploadForm" class="hidden">
+          <p class="small muted" data-i18n="uploadPrivacy">Files should be stored in a private bucket. Upload is disabled until the bucket and its policies are configured.</p>
+          <div class="field"><label for="reportFile" data-i18n="chooseFile">Choose PDF or image (max 5 MB)</label><input id="reportFile" type="file" accept=".pdf,image/jpeg,image/png,image/webp" /></div>
+          <button class="primary" type="submit" data-i18n="upload">Upload</button>
+        </form>
+        <div id="notesList"></div>
+      </div>
+    </div>
+    <div id="doctorDashboard" class="hidden">
+      <div class="notice" data-i18n="doctorAccessNote">Only patients who have granted access to this doctor should appear here. Doctor permissions must be assigned by an administrator.</div>
+      <div class="card">
+        <div class="spread"><h2 data-i18n="authorisedPatients">Authorised patients</h2><button id="loadDoctorPatients" class="secondary" data-i18n="loadPatients">Load patients</button></div>
+        <p class="muted" data-i18n="doctorDashboardDesc">This dashboard lists only patient profiles linked to your approved doctor account by the database access policy.</p>
+        <div id="doctorPatientsList"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer data-i18n="footer">MedNotes student prototype • Do not use real medical information until security has been independently reviewed.</footer>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+  // IMPORTANT: replace these two placeholders with your Supabase Project URL
+  // and publishable/anon key. Never put a service_role or secret key here.
+  const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
+  const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+  const supabaseConfigured =
+    SUPABASE_URL.startsWith("https://") &&
+    !SUPABASE_URL.includes("YOUR_SUPABASE") &&
+    SUPABASE_PUBLISHABLE_KEY.length > 20 &&
+    !SUPABASE_PUBLISHABLE_KEY.includes("YOUR_SUPABASE");
+
+  const supabase = supabaseConfigured
+    ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      })
+    : null;
+
+  const translations = {
+    en: {
+      language:"Language",login:"Log in",signup:"Sign up",logout:"Log out",carePortal:"Patient & doctor portal",
+      welcome:"Your health history, organised in one place.",intro:"Keep your health details, visit notes and reports organised so you can share relevant information with an authorised healthcare professional.",
+      getStarted:"Get started",demoWarning:"Student project prototype. Use dummy information only; this is not an emergency or clinical-care service.",
+      simpleCare:"Simple, organised care",accessible:"Designed with clear controls and multilingual labels.",patientRecords:"Patient records",
+      patientRecordsDesc:"Keep your profile and health notes together.",reports:"Reports",reportsDesc:"Upload a report to private storage after setup.",
+      doctorAccess:"Doctor access",doctorAccessDesc:"Doctors should only see records explicitly authorised for them.",
+      createAccount:"Create account",back:"Back",authNote:"Use an email you can access. Email verification may be required before signing in.",
+      fullName:"Full name",email:"Email",birthDate:"Date of birth (optional)",accountType:"Account type",patient:"Patient",doctor:"Doctor (requires admin approval)",
+      doctorApproval:"Choosing Doctor does not grant doctor permissions. An administrator must approve the account in Supabase.",
+      password:"Password",confirmPassword:"Confirm password",forgotPassword:"Forgot password?",dashboard:"Dashboard",refresh:"Refresh",
+      myProfile:"My profile",phone:"Phone (optional)",saveProfile:"Save profile",addHealthNote:"Add health note",noteTitle:"Title",
+      noteDetails:"Details",saveNote:"Save note",myNotes:"My health notes",uploadReport:"Upload report",uploadPrivacy:"Files should be stored in a private bucket. Upload is disabled until the bucket and its policies are configured.",
+      chooseFile:"Choose PDF or image (max 5 MB)",upload:"Upload",doctorAccessNote:"Only patients who have granted access to this doctor should appear here. Doctor permissions must be assigned by an administrator.",
+      authorisedPatients:"Authorised patients",loadPatients:"Load patients",doctorDashboardDesc:"This dashboard lists only patient profiles linked to your approved doctor account by the database access policy.",
+      footer:"MedNotes student prototype • Do not use real medical information until security has been independently reviewed.",already:"Already have an account?",noAccount:"New to MedNotes?",profileSaved:"Profile saved.",noteSaved:"Health note saved.",
+      signupSuccess:"Account created. Check your email if verification is required.",loginSuccess:"Signed in.",loggedOut:"Signed out.",configMissing:"Setup needed: add your Supabase URL and publishable key in index.html, then run the supplied SQL schema.",
+      passwordMismatch:"Passwords do not match.",passwordLength:"Use a password with at least 12 characters.",genericError:"Something went wrong. Please try again.",
+      verifyEmail:"Check your email to verify your account before signing in.",noNotes:"No health notes yet.",noPatients:"No authorised patients were found or your doctor access has not been approved.",
+      profileLoadError:"Could not load profile.",noteLoadError:"Could not load notes.",notDoctor:"This account is not approved as a doctor.",forgotSent:"If the email is registered, a password reset link will be sent.",
+      resetSubject:"Password reset",patientId:"Patient ID",created:"Created",deleteNote:"Delete",noteDeleted:"Note deleted.",reportNotReady:"Secure upload is not enabled yet. Configure the private storage bucket and its policies before uploading reports.",
+      doctorNotApproved:"Doctor accounts require approval by an administrator. Until approved, this account has patient-level access only.",refresh:"Refresh"
+    },
+    hi: {
+      language:"भाषा",login:"लॉग इन करें",signup:"साइन अप करें",logout:"लॉग आउट करें",carePortal:"मरीज़ और डॉक्टर पोर्टल",
+      welcome:"आपका स्वास्थ्य इतिहास, एक ही जगह व्यवस्थित।",intro:"अपने स्वास्थ्य विवरण, विज़िट नोट्स और रिपोर्ट व्यवस्थित रखें और अधिकृत स्वास्थ्य पेशेवर के साथ साझा करें।",
+      getStarted:"शुरू करें",demoWarning:"विद्यार्थी परियोजना का नमूना। केवल काल्पनिक जानकारी उपयोग करें; यह आपातकालीन या चिकित्सा सेवा नहीं है।",
+      simpleCare:"सरल और व्यवस्थित देखभाल",accessible:"स्पष्ट नियंत्रण और कई भाषाओं के साथ बनाया गया।",patientRecords:"मरीज़ के रिकॉर्ड",
+      patientRecordsDesc:"अपनी प्रोफ़ाइल और स्वास्थ्य नोट्स एक साथ रखें।",reports:"रिपोर्ट",reportsDesc:"सेटअप के बाद रिपोर्ट निजी स्टोरेज में अपलोड करें।",
+      doctorAccess:"डॉक्टर की पहुँच",doctorAccessDesc:"डॉक्टर केवल वही रिकॉर्ड देखें जिनकी अनुमति दी गई है।",
+      createAccount:"खाता बनाएँ",back:"वापस",authNote:"ऐसा ईमेल उपयोग करें जिसे आप खोल सकते हैं। लॉग इन से पहले ईमेल सत्यापन आवश्यक हो सकता है।",
+      fullName:"पूरा नाम",email:"ईमेल",birthDate:"जन्म तिथि (वैकल्पिक)",accountType:"खाते का प्रकार",patient:"मरीज़",doctor:"डॉक्टर (प्रशासक की मंज़ूरी आवश्यक)",
+      doctorApproval:"डॉक्टर चुनने से डॉक्टर की अनुमति नहीं मिलती। प्रशासक को Supabase में खाते को मंज़ूरी देनी होगी।",
+      password:"पासवर्ड",confirmPassword:"पासवर्ड की पुष्टि करें",forgotPassword:"पासवर्ड भूल गए?",dashboard:"डैशबोर्ड",refresh:"रीफ़्रेश",
+      myProfile:"मेरी प्रोफ़ाइल",phone:"फ़ोन (वैकल्पिक)",saveProfile:"प्रोफ़ाइल सहेजें",addHealthNote:"स्वास्थ्य नोट जोड़ें",noteTitle:"शीर्षक",
+      noteDetails:"विवरण",saveNote:"नोट सहेजें",myNotes:"मेरे स्वास्थ्य नोट्स",uploadReport:"रिपोर्ट अपलोड करें",uploadPrivacy:"फ़ाइलें निजी बकेट में रखी जानी चाहिए। बकेट और उसकी नीतियाँ सेट होने तक अपलोड बंद है।",
+      chooseFile:"PDF या छवि चुनें (अधिकतम 5 MB)",upload:"अपलोड",doctorAccessNote:"यहाँ केवल वे मरीज़ दिखने चाहिए जिन्होंने इस डॉक्टर को अनुमति दी है। डॉक्टर की अनुमति प्रशासक द्वारा तय की जानी चाहिए।",
+      authorisedPatients:"अनुमति प्राप्त मरीज़",loadPatients:"मरीज़ लोड करें",doctorDashboardDesc:"यह डैशबोर्ड डेटाबेस नीति के अनुसार आपके स्वीकृत डॉक्टर खाते से जुड़े मरीज़ ही दिखाता है।",
+      footer:"MedNotes विद्यार्थी नमूना • स्वतंत्र सुरक्षा समीक्षा से पहले असली चिकित्सा जानकारी उपयोग न करें।",already:"पहले से खाता है?",noAccount:"MedNotes पर नए हैं?",profileSaved:"प्रोफ़ाइल सहेजी गई।",noteSaved:"स्वास्थ्य नोट सहेजा गया।",
+      signupSuccess:"खाता बनाया गया। सत्यापन आवश्यक हो तो ईमेल देखें।",loginSuccess:"लॉग इन हो गया।",loggedOut:"लॉग आउट हो गया।",configMissing:"सेटअप आवश्यक: index.html में Supabase URL और publishable key जोड़ें, फिर दिया गया SQL चलाएँ।",
+      passwordMismatch:"पासवर्ड मेल नहीं खाते।",passwordLength:"कम से कम 12 अक्षरों का पासवर्ड रखें।",genericError:"कुछ गड़बड़ हुई। कृपया फिर कोशिश करें।",
+      verifyEmail:"लॉग इन से पहले खाते का ईमेल सत्यापित करें।",noNotes:"अभी कोई स्वास्थ्य नोट नहीं है।",noPatients:"कोई अधिकृत मरीज़ नहीं मिला या डॉक्टर की अनुमति स्वीकृत नहीं है।",
+      profileLoadError:"प्रोफ़ाइल लोड नहीं हो सकी।",noteLoadError:"नोट्स लोड नहीं हो सके।",notDoctor:"यह खाता स्वीकृत डॉक्टर खाता नहीं है।",forgotSent:"यदि ईमेल पंजीकृत है, तो पासवर्ड रीसेट लिंक भेजा जाएगा।",
+      patientId:"मरीज़ ID",created:"बनाया गया",deleteNote:"हटाएँ",noteDeleted:"नोट हटा दिया गया।",reportNotReady:"सुरक्षित अपलोड अभी सक्षम नहीं है। रिपोर्ट अपलोड करने से पहले निजी स्टोरेज बकेट और नीतियाँ सेट करें।",
+      doctorNotApproved:"डॉक्टर खाते को प्रशासक की मंज़ूरी चाहिए। मंज़ूरी तक इस खाते को केवल मरीज़ की पहुँच मिलेगी।"
+    },
+    mr: {
+      language:"भाषा",login:"लॉग इन",signup:"नोंदणी करा",logout:"लॉग आउट",carePortal:"रुग्ण आणि डॉक्टर पोर्टल",
+      welcome:"तुमचा आरोग्य इतिहास, एकाच ठिकाणी व्यवस्थित.",intro:"तुमची आरोग्यविषयक माहिती, भेटींच्या नोंदी आणि अहवाल व्यवस्थित ठेवा आणि अधिकृत आरोग्यतज्ज्ञांसोबत शेअर करा.",
+      getStarted:"सुरू करा",demoWarning:"विद्यार्थी प्रकल्पाचा नमुना. फक्त काल्पनिक माहिती वापरा; ही आपत्कालीन किंवा वैद्यकीय सेवा नाही.",
+      simpleCare:"सोपे आणि व्यवस्थित आरोग्य व्यवस्थापन",accessible:"स्पष्ट पर्याय आणि अनेक भाषांसह तयार केलेले.",patientRecords:"रुग्ण नोंदी",
+      patientRecordsDesc:"तुमची प्रोफाइल आणि आरोग्य नोंदी एकत्र ठेवा.",reports:"अहवाल",reportsDesc:"सेटअपनंतर अहवाल खाजगी स्टोरेजमध्ये अपलोड करा.",
+      doctorAccess:"डॉक्टर प्रवेश",doctorAccessDesc:"डॉक्टरांनी फक्त अधिकृत नोंदीच पाहाव्यात.",
+      createAccount:"खाते तयार करा",back:"मागे",authNote:"तुम्ही वापरू शकता असा ईमेल द्या. लॉग इनपूर्वी ईमेल पडताळणी लागू शकते.",
+      fullName:"पूर्ण नाव",email:"ईमेल",birthDate:"जन्मतारीख (ऐच्छिक)",accountType:"खात्याचा प्रकार",patient:"रुग्ण",doctor:"डॉक्टर (प्रशासकाची मंजुरी आवश्यक)",
+      doctorApproval:"डॉक्टर निवडल्याने डॉक्टरचे अधिकार मिळत नाहीत. Supabase मध्ये प्रशासकाने खाते मंजूर करणे आवश्यक आहे.",
+      password:"पासवर्ड",confirmPassword:"पासवर्डची पुष्टी करा",forgotPassword:"पासवर्ड विसरलात?",dashboard:"डॅशबोर्ड",refresh:"रीफ्रेश",
+      myProfile:"माझी प्रोफाइल",phone:"फोन (ऐच्छिक)",saveProfile:"प्रोफाइल जतन करा",addHealthNote:"आरोग्य नोंद जोडा",noteTitle:"शीर्षक",
+      noteDetails:"तपशील",saveNote:"नोंद जतन करा",myNotes:"माझ्या आरोग्य नोंदी",uploadReport:"अहवाल अपलोड करा",uploadPrivacy:"फाइल खाजगी बकेटमध्ये असावी. बकेट आणि धोरणे सेट होईपर्यंत अपलोड बंद आहे.",
+      chooseFile:"PDF किंवा प्रतिमा निवडा (कमाल 5 MB)",upload:"अपलोड",doctorAccessNote:"येथे फक्त या डॉक्टरला परवानगी दिलेले रुग्ण दिसावेत. डॉक्टरचे अधिकार प्रशासकाने मंजूर करावेत.",
+      authorisedPatients:"अधिकृत रुग्ण",loadPatients:"रुग्ण लोड करा",doctorDashboardDesc:"डेटाबेस धोरणानुसार या डॅशबोर्डमध्ये मंजूर डॉक्टरशी जोडलेले रुग्णच दिसतात.",
+      footer:"MedNotes विद्यार्थी नमुना • स्वतंत्र सुरक्षा तपासणीपूर्वी खरी वैद्यकीय माहिती वापरू नका.",already:"आधीच खाते आहे?",noAccount:"MedNotes वर नवीन आहात?",profileSaved:"प्रोफाइल जतन झाली.",noteSaved:"आरोग्य नोंद जतन झाली.",
+      signupSuccess:"खाते तयार झाले. पडताळणी आवश्यक असल्यास ईमेल तपासा.",loginSuccess:"लॉग इन झाले.",loggedOut:"लॉग आउट झाले.",configMissing:"सेटअप आवश्यक: index.html मध्ये Supabase URL आणि publishable key जोडा आणि दिलेली SQL स्क्रिप्ट चालवा.",
+      passwordMismatch:"पासवर्ड जुळत नाहीत.",passwordLength:"किमान 12 अक्षरांचा पासवर्ड वापरा.",genericError:"काहीतरी चुकले. पुन्हा प्रयत्न करा.",
+      verifyEmail:"लॉग इन करण्यापूर्वी ईमेल पडताळा.",noNotes:"अजून आरोग्य नोंदी नाहीत.",noPatients:"अधिकृत रुग्ण आढळले नाहीत किंवा डॉक्टरची परवानगी मंजूर नाही.",
+      profileLoadError:"प्रोफाइल लोड झाली नाही.",noteLoadError:"नोंदी लोड झाल्या नाहीत.",notDoctor:"हे खाते मंजूर डॉक्टर खाते नाही.",forgotSent:"ईमेल नोंदणीकृत असल्यास पासवर्ड रीसेट लिंक पाठवली जाईल.",
+      patientId:"रुग्ण ID",created:"तयार केले",deleteNote:"हटवा",noteDeleted:"नोंद हटवली.",reportNotReady:"सुरक्षित अपलोड अजून सुरू नाही. अहवाल अपलोड करण्यापूर्वी खाजगी स्टोरेज बकेट व धोरणे सेट करा.",
+      doctorNotApproved:"डॉक्टर खात्यासाठी प्रशासकाची मंजुरी आवश्यक आहे. मंजुरीपर्यंत या खात्याला फक्त रुग्णाचा प्रवेश असेल."
+    },
+    kok: {
+      language:"भास",login:"लॉग इन",signup:"नोंदणी करात",logout:"लॉग आउट",carePortal:"रुग्ण आनी डॉक्टर पोर्टल",
+      welcome:"तुमचो भलायकी इतिहास, एका जाग्यार नीट.",intro:"तुमची भलायकी म्हायती, भेटींच्यो नोंदी आनी अहवाल नीट दवरात आनी अधिकृत भलायकी तज्ञां कडेन वांटात.",
+      getStarted:"सुरू करात",demoWarning:"विद्यार्थी प्रकल्प नमुनो. फकत काल्पनिक म्हायती वापरात; ही आपत्कालीन वा वैद्यकीय सेवा न्हय.",
+      simpleCare:"सोपी आनी नीट भलायकी देखभाल",accessible:"स्पष्ट पर्याय आनी जायत्यो भासां सयत तयार केल्लें.",patientRecords:"रुग्ण नोंदी",
+      patientRecordsDesc:"तुमची प्रोफाइल आनी भलायकी नोंदी एकठांय दवरात.",reports:"अहवाल",reportsDesc:"सेटअप जाल्या उपरांत अहवाल खाजगी स्टोरेजांत अपलोड करात.",
+      doctorAccess:"डॉक्टर प्रवेश",doctorAccessDesc:"डॉक्टरांनी फकत परवानगी दिल्ल्यो नोंदी पळोवच्यो.",
+      createAccount:"खातें तयार करात",back:"फाटीं",authNote:"तुमी वापरूंक शकता असो ईमेल दिवचो. लॉग इनापयलीं ईमेल पडताळणी लागू जावंक शकता.",
+      fullName:"पुराय नांव",email:"ईमेल",birthDate:"जल्म तारीख (ऐच्छिक)",accountType:"खात्याचो प्रकार",patient:"रुग्ण",doctor:"डॉक्टर (प्रशासकाची मान्यताय जाय)",
+      doctorApproval:"डॉक्टर निवडिल्ल्यान डॉक्टराचे अधिकार मेळनात. Supabase त प्रशासकान खातें मान्य करप गरजेचें.",
+      password:"पासवर्ड",confirmPassword:"पासवर्डाची खात्री",forgotPassword:"पासवर्ड विसरलात?",dashboard:"डॅशबोर्ड",refresh:"परत लोड करात",
+      myProfile:"म्हजी प्रोफाइल",phone:"फोन (ऐच्छिक)",saveProfile:"प्रोफाइल जतन करात",addHealthNote:"भलायकी नोंद जोडात",noteTitle:"शीर्षक",
+      noteDetails:"तपशील",saveNote:"नोंद जतन करात",myNotes:"म्हज्यो भलायकी नोंदी",uploadReport:"अहवाल अपलोड करात",uploadPrivacy:"फायल खाजगी बकेटांत दवरपाक जाय. बकेट आनी धोरणां सेट जावसर अपलोड बंद आसा.",
+      chooseFile:"PDF वा प्रतिमा निवडात (कमाल 5 MB)",upload:"अपलोड",doctorAccessNote:"हांगा फकत ह्या डॉक्टराक परवानगी दिल्ले रुग्ण दिसपाक जाय. डॉक्टराचे अधिकार प्रशासकान मान्य करचे.",
+      authorisedPatients:"परवानगी आशिल्ले रुग्ण",loadPatients:"रुग्ण लोड करात",doctorDashboardDesc:"डेटाबेस धोरणाप्रमाणें मंजूर डॉक्टराक जोडिल्ले रुग्णच ह्या डॅशबोर्डांत दिसतात.",
+      footer:"MedNotes विद्यार्थी नमुनो • स्वतंत्र सुरक्षा तपासणी पयलीं खरी वैद्यकीय म्हायती वापरू नाकात.",already:"आधींच खातें आसा?",noAccount:"MedNotes त नवें आसात?",profileSaved:"प्रोफाइल जतन जाली.",noteSaved:"भलायकी नोंद जतन जाली.",
+      signupSuccess:"खातें तयार जालें. पडताळणी जाय जाल्यार ईमेल तपासात.",loginSuccess:"लॉग इन जालें.",loggedOut:"लॉग आउट जालें.",configMissing:"सेटअप जाय: index.html त Supabase URL आनी publishable key घालात आनी दिल्ली SQL चालोवात.",
+      passwordMismatch:"पासवर्ड जुळनात.",passwordLength:"किमान 12 अक्षरांचो पासवर्ड वापरात.",genericError:"कांयतरी चुकलें. परत प्रयत्न करात.",
+      verifyEmail:"लॉग इनापयलीं ईमेल पडताळात.",noNotes:"अजून भलायकी नोंदी नात.",noPatients:"परवानगी आशिल्ले रुग्ण मेळ्ळे नात वा डॉक्टराची परवानगी मान्य ना.",
+      profileLoadError:"प्रोफाइल लोड जाली ना.",noteLoadError:"नोंदी लोड जाल्यो नात.",notDoctor:"हें खातें मान्य डॉक्टर खातें न्हय.",forgotSent:"ईमेल नोंदणी जालो आसल्यार पासवर्ड रीसेट लिंक धाडटले.",
+      patientId:"रुग्ण ID",created:"तयार केलें",deleteNote:"काडात",noteDeleted:"नोंद काडली.",reportNotReady:"सुरक्षित अपलोड अजून सुरू ना. अहवाल अपलोड करपापयलीं खाजगी स्टोरेज बकेट आनी धोरणां सेट करात.",
+      doctorNotApproved:"डॉक्टर खात्याक प्रशासकाची मान्यताय जाय. मान्यताय मेळसर ह्या खात्याक फकत रुग्णाचो प्रवेश आसतलो."
+    }
+  };
+
+  const $ = id => document.getElementById(id);
+  let currentLanguage = localStorage.getItem("mednotes-language") || "en";
+  let currentUser = null;
+  let currentProfile = null;
+
+  function t(key) {
+    return (translations[currentLanguage] && translations[currentLanguage][key]) ||
+      translations.en[key] || key;
+  }
+  function translatePage(lang) {
+    currentLanguage = translations[lang] ? lang : "en";
+    localStorage.setItem("mednotes-language", currentLanguage);
+    document.documentElement.lang = currentLanguage;
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.dataset.i18n;
+      if (t(key)) el.textContent = t(key);
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+      el.placeholder = t(el.dataset.i18nPlaceholder);
+    });
+    $("languageSelect").value = currentLanguage;
+    updateAuthSwitchText();
+  }
+  function message(text, type="notice") {
+    const box = $("appMessage");
+    box.className = text ? `notice ${type}` : "";
+    box.textContent = text || "";
+    if (text) window.scrollTo({top:0,behavior:"smooth"});
+  }
+  function showView(view) {
+    ["homeView","authView","dashboardView"].forEach(id => $(id).classList.add("hidden"));
+    $(view).classList.remove("hidden");
+  }
+  function showAuth(mode) {
+    showView("authView");
+    const signup = mode === "signup";
+    $("signupForm").classList.toggle("hidden", !signup);
+    $("loginForm").classList.toggle("hidden", signup);
+    $("authTitle").textContent = t(signup ? "createAccount" : "login");
+    $("authSwitchText").dataset.mode = signup ? "signup" : "login";
+    updateAuthSwitchText();
+    message("");
+  }
+  function updateAuthSwitchText() {
+    const mode = $("authSwitchText").dataset.mode || "signup";
+    $("authSwitchText").firstChild.textContent = mode === "signup" ? t("already") + " " : t("noAccount") + " ";
+    $("switchToLogin").textContent = mode === "signup" ? t("login") : t("signup");
+  }
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
+  function safeError(error) {
+    console.error(error);
+    return t("genericError");
+  }
+
+  $("languageSelect").addEventListener("change", e => translatePage(e.target.value));
+  $("headerLoginBtn").addEventListener("click", () => showAuth("login"));
+  $("headerSignupBtn").addEventListener("click", () => showAuth("signup"));
+  $("heroLogin").addEventListener("click", () => showAuth("login"));
+  $("heroGetStarted").addEventListener("click", () => showAuth("signup"));
+  $("backHome").addEventListener("click", () => showView("homeView"));
+  $("switchToLogin").addEventListener("click", () => showAuth($("authSwitchText").dataset.mode === "signup" ? "login" : "signup"));
+  $("showUpload").addEventListener("click", () => $("uploadForm").classList.toggle("hidden"));
+
+  $("signupForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    message("");
+    if (!supabase) return message(t("configMissing"), "error");
+    const name = $("signupName").value.trim();
+    const email = $("signupEmail").value.trim();
+    const password = $("signupPassword").value;
+    const confirm = $("signupConfirm").value;
+    const birthDate = $("signupBirth").value || null;
+    if (password !== confirm) return message(t("passwordMismatch"), "error");
+    if (password.length < 12) return message(t("passwordLength"), "error");
+
+    // The role selector is deliberately NOT used to grant permissions.
+    // All new accounts begin as patient; admin must approve doctors in Supabase.
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { full_name: name, requested_role: $("signupRole").value, birth_date: birthDate } }
+    });
+    if (error) return message(safeError(error), "error");
+    $("signupForm").reset();
+    message(t("signupSuccess"), "success");
+    showAuth("login");
+  });
+
+  $("loginForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    message("");
+    if (!supabase) return message(t("configMissing"), "error");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: $("loginEmail").value.trim(),
+      password: $("loginPassword").value
+    });
+    if (error) return message(t("genericError"), "error");
+    await refreshSession();
+  });
+
+  $("forgotPassword").addEventListener("click", async () => {
+    if (!supabase) return message(t("configMissing"), "error");
+    const email = $("loginEmail").value.trim();
+    if (!email) return message(t("forgotSent"));
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) return message(t("genericError"), "error");
+    message(t("forgotSent"), "success");
+  });
+
+  $("logoutBtn").addEventListener("click", async () => {
+    if (supabase) await supabase.auth.signOut();
+    currentUser = null; currentProfile = null;
+    $("logoutBtn").classList.add("hidden");
+    $("headerLoginBtn").classList.remove("hidden");
+    $("headerSignupBtn").classList.remove("hidden");
+    showView("homeView");
+    message(t("loggedOut"), "success");
+  });
+
+  async function refreshSession() {
+    if (!supabase) return;
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error || !session) {
+      currentUser = null;
+      $("logoutBtn").classList.add("hidden");
+      showView("homeView");
+      return;
+    }
+    currentUser = session.user;
+    await loadDashboard();
+  }
+
+  async function loadDashboard() {
+    if (!supabase || !currentUser) return;
+    const { data: profile, error } = await supabase
+      .from("patient_profiles")
+      .select("user_id,full_name,birth_date,phone,role")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if (error) {
+      message(t("profileLoadError"), "error");
+      return;
+    }
+    currentProfile = profile;
+    $("headerLoginBtn").classList.add("hidden");
+    $("headerSignupBtn").classList.add("hidden");
+    $("logoutBtn").classList.remove("hidden");
+    $("welcomeUser").textContent = profile?.full_name || currentUser.email || "";
+    $("roleBadge").textContent = profile?.role === "doctor" ? t("doctor") : t("patient");
+    showView("dashboardView");
+    $("patientDashboard").classList.toggle("hidden", profile?.role === "doctor");
+    $("doctorDashboard").classList.toggle("hidden", profile?.role !== "doctor");
+
+    if (profile?.role === "doctor") {
+      await loadDoctorPatients();
+    } else {
+      $("profileName").value = profile?.full_name || currentUser.user_metadata?.full_name || "";
+      $("profileBirth").value = profile?.birth_date || currentUser.user_metadata?.birth_date || "";
+      $("profilePhone").value = profile?.phone || "";
+      await loadNotes();
+    }
+    message("");
+  }
+
+  $("profileForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!supabase || !currentUser) return;
+    const update = {
+      user_id: currentUser.id,
+      full_name: $("profileName").value.trim(),
+      birth_date: $("profileBirth").value || null,
+      phone: $("profilePhone").value.trim() || null
+    };
+    const { error } = await supabase.from("patient_profiles").upsert(update, { onConflict:"user_id" });
+    if (error) return message(safeError(error), "error");
+    message(t("profileSaved"), "success");
+    $("welcomeUser").textContent = update.full_name;
+  });
+
+  $("noteForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!supabase || !currentUser) return;
+    const title = $("noteTitle").value.trim();
+    const body = $("noteText").value.trim();
+    const { error } = await supabase.from("medical_notes").insert({
+      patient_id: currentUser.id, title, body
+    });
+    if (error) return message(safeError(error), "error");
+    $("noteForm").reset();
+    message(t("noteSaved"), "success");
+    await loadNotes();
+  });
+
+  async function loadNotes() {
+    if (!supabase || !currentUser) return;
+    const { data, error } = await supabase.from("medical_notes")
+      .select("id,title,body,created_at")
+      .eq("patient_id", currentUser.id)
+      .order("created_at", { ascending:false });
+    if (error) {
+      $("notesList").textContent = t("noteLoadError");
+      return;
+    }
+    const list = $("notesList");
+    list.replaceChildren();
+    if (!data?.length) {
+      list.textContent = t("noNotes");
+      return;
+    }
+    data.forEach(note => {
+      const item = document.createElement("article");
+      item.className = "record";
+      const h = document.createElement("h3");
+      h.textContent = note.title;
+      const p = document.createElement("p");
+      p.textContent = note.body;
+      const small = document.createElement("p");
+      small.className = "small muted";
+      small.textContent = new Date(note.created_at).toLocaleString();
+      const del = document.createElement("button");
+      del.className = "danger";
+      del.textContent = t("deleteNote");
+      del.addEventListener("click", async () => {
+        const { error: deleteError } = await supabase.from("medical_notes").delete().eq("id", note.id);
+        if (deleteError) return message(safeError(deleteError), "error");
+        message(t("noteDeleted"), "success");
+        await loadNotes();
+      });
+      item.append(h,p,small,del);
+      list.append(item);
+    });
+  }
+
+  async function loadDoctorPatients() {
+    if (!supabase || !currentUser || currentProfile?.role !== "doctor") {
+      $("doctorPatientsList").textContent = t("notDoctor");
+      return;
+    }
+    // RLS only returns patients for whom this doctor has an approved access link.
+    const { data, error } = await supabase.from("doctor_patient_access")
+      .select("patient_id,patient_profiles!doctor_patient_access_patient_id_fkey(user_id,full_name,birth_date)")
+      .eq("doctor_id", currentUser.id)
+      .eq("approved", true);
+    const list = $("doctorPatientsList");
+    list.replaceChildren();
+    if (error) {
+      list.textContent = t("noPatients");
+      console.error(error);
+      return;
+    }
+    if (!data?.length) {
+      list.textContent = t("noPatients");
+      return;
+    }
+    data.forEach(row => {
+      const p = row.patient_profiles;
+      const item = document.createElement("article");
+      item.className = "record";
+      const title = document.createElement("h3");
+      title.textContent = p?.full_name || t("patient");
+      const id = document.createElement("p");
+      id.className = "small muted";
+      id.textContent = `${t("patientId")}: ${row.patient_id}`;
+      item.append(title,id);
+      list.append(item);
+    });
+  }
+
+  $("loadDoctorPatients").addEventListener("click", loadDoctorPatients);
+  $("refreshDashboard").addEventListener("click", refreshSession);
+  $("uploadForm").addEventListener("submit", e => {
+    e.preventDefault();
+    message(t("reportNotReady"), "error");
+  });
+
+  translatePage(currentLanguage);
+  if (supabase) {
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      // Defer async work out of the auth callback to avoid blocking auth events.
+      setTimeout(() => refreshSession(), 0);
+    });
+    refreshSession();
+  } else {
+    $("authNote").textContent = t("configMissing");
+  }
+</script>
+</body>
+</html>
+'''
+
+sql = r'''-- MedNotes starter schema for Supabase.
+-- Run this in Supabase > SQL Editor, after creating your project.
+-- Test with dummy accounts only. Review security policies before real use.
+
+create extension if not exists pgcrypto;
+
+-- Profiles: role defaults to patient. Users must NOT be allowed to update their own role.
+create table if not exists public.patient_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  full_name text not null default 'Patient',
+  birth_date date,
+  phone text,
+  role text not null default 'patient' check (role in ('patient','doctor','admin')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.patient_profiles enable row level security;
+
+drop policy if exists "Users read own profile" on public.patient_profiles;
+create policy "Users read own profile"
+on public.patient_profiles for select to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users insert own patient profile" on public.patient_profiles;
+create policy "Users insert own patient profile"
+on public.patient_profiles for insert to authenticated
+with check ((select auth.uid()) = user_id and role = 'patient');
+
+drop policy if exists "Users update own profile but not role" on public.patient_profiles;
+create policy "Users update own profile but not role"
+on public.patient_profiles for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id and role = 'patient');
+
+-- Create profile automatically. Do not trust user metadata to grant doctor/admin role.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.patient_profiles (user_id, full_name, birth_date, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'full_name', 'Patient'),
+    nullif(new.raw_user_meta_data ->> 'birth_date', '')::date,
+    'patient'
+  )
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_mednotes on auth.users;
+create trigger on_auth_user_created_mednotes
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+-- Notes belong to a patient. Patients can only read/write their own notes.
+create table if not exists public.medical_notes (
+  id uuid primary key default gen_random_uuid(),
+  patient_id uuid not null references auth.users(id) on delete cascade,
+  title text not null check (char_length(title) between 1 and 120),
+  body text not null check (char_length(body) between 1 and 5000),
+  created_at timestamptz not null default now()
+);
+
+alter table public.medical_notes enable row level security;
+
+drop policy if exists "Patients read own notes" on public.medical_notes;
+create policy "Patients read own notes"
+on public.medical_notes for select to authenticated
+using ((select auth.uid()) = patient_id);
+
+drop policy if exists "Patients create own notes" on public.medical_notes;
+create policy "Patients create own notes"
+on public.medical_notes for insert to authenticated
+with check ((select auth.uid()) = patient_id);
+
+drop policy if exists "Patients delete own notes" on public.medical_notes;
+create policy "Patients delete own notes"
+on public.medical_notes for delete to authenticated
+using ((select auth.uid()) = patient_id);
+
+-- Doctors only see patients with an explicit, approved access link.
+create table if not exists public.doctor_patient_access (
+  doctor_id uuid not null references auth.users(id) on delete cascade,
+  patient_id uuid not null references auth.users(id) on delete cascade,
+  approved boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (doctor_id, patient_id),
+  constraint different_doctor_patient check (doctor_id <> patient_id)
+);
+
+alter table public.doctor_patient_access enable row level security;
+
+-- Both sides can see their own link; only trusted admins should approve links.
+drop policy if exists "Participants can view own access links" on public.doctor_patient_access;
+create policy "Participants can view own access links"
+on public.doctor_patient_access for select to authenticated
+using ((select auth.uid()) = doctor_id or (select auth.uid()) = patient_id);
+
+-- Do not provide insert/update/delete policies to public users here.
+-- Add a trusted approval workflow (e.g. reviewed admin process or server-side function)
+-- before creating access links or changing approved to true.
+
+-- Allow approved doctors to read the linked patient's profile.
+drop policy if exists "Approved doctors read linked patient profiles" on public.patient_profiles;
+create policy "Approved doctors read linked patient profiles"
+on public.patient_profiles for select to authenticated
+using (
+  exists (
+    select 1
+    from public.doctor_patient_access a
+    join public.patient_profiles doctor_profile on doctor_profile.user_id = a.doctor_id
+    where a.patient_id = patient_profiles.user_id
+      and a.doctor_id = (select auth.uid())
+      and a.approved = true
+      and doctor_profile.role = 'doctor'
+  )
+);
+
+-- Allow approved doctors to read notes for patients linked to them.
+drop policy if exists "Approved doctors read linked patient notes" on public.medical_notes;
+create policy "Approved doctors read linked patient notes"
+on public.medical_notes for select to authenticated
+using (
+  exists (
+    select 1
+    from public.doctor_patient_access a
+    join public.patient_profiles doctor_profile on doctor_profile.user_id = a.doctor_id
+    where a.patient_id = medical_notes.patient_id
+      and a.doctor_id = (select auth.uid())
+      and a.approved = true
+      and doctor_profile.role = 'doctor'
+  )
+);
+
+-- IMPORTANT: an administrator must approve doctor accounts through a trusted process.
+-- Never let a public signup form set role='doctor' or role='admin'.
+-- Configure a private Storage bucket named "medical-reports" separately.
+-- Storage access policies must check auth.uid() against the patient folder / access links.
+'''
+
+readme = r'''# MedNotes secure starter (GitHub Pages + Supabase)
+
+## Files
+- `index.html`: responsive bilingual/multilingual patient + doctor dashboard frontend.
+- `supabase-schema.sql`: starter tables and Row Level Security policies.
+
+## Setup
+1. Create a Supabase project.
+2. Open SQL Editor and run `supabase-schema.sql`.
+3. In `index.html`, replace:
+   - `YOUR_SUPABASE_PROJECT_URL`
+   - `YOUR_SUPABASE_PUBLISHABLE_KEY`
+   with the project's URL and publishable/anon key. Never use a service-role/secret key in frontend code.
+4. In Supabase Authentication settings, configure your site URL and allowed redirect URLs for your GitHub Pages URL.
+5. Enable email verification and test signup, login, logout, and password reset with dummy accounts.
+6. Publish `index.html` in your GitHub Pages repository.
+
+## Important limitations
+- Use dummy data only until a security review is complete.
+- New signups are always `patient` in the database. The signup form's "Doctor" choice only records a request in auth metadata; it does not grant doctor permissions.
+- Doctor access is deliberately restricted. `doctor_patient_access` has no public insert/update/delete policies, so an administrator/trusted workflow must create and approve links.
+- This starter does not implement secure report upload yet. The upload form is intentionally disabled until you create a private `medical-reports` Storage bucket and carefully configure its policies.
+- The password reset UI sends a reset email. Configure the Supabase redirect URL and test the full reset flow.
+- Do not store passwords, access tokens, or private medical files in localStorage. Supabase's client manages its auth session; do not manually store passwords.
+- This is a student prototype, not a production-ready medical records system. Have a qualified reviewer audit access policies, storage, account recovery, and applicable privacy requirements before real patient data is used.
+'''
+open(os.path.join(base, "index.html"), "w", encoding="utf-8").write(html)
+open(os.path.join(base, "supabase-schema.sql"), "w", encoding="utf-8").write(sql)
+open(os.path.join(base, "README.txt"), "w", encoding="utf-8").write(readme)
+zip_path = "/mnt/data/MedNotes_GitHubPages_Supabase_Starter.zip"
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    for fn in ["index.html", "supabase-schema.sql", "README.txt"]:
+        z.write(os.path.join(base, fn), arcname=fn)
+print("Created:", zip_path)
+print("Files:", os.path.getsize(os.path.join(base,"index.html")), os.path.getsize(os.path.join(base,"supabase-schema.sql")))
